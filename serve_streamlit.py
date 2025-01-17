@@ -1,7 +1,7 @@
 from pathlib import Path
 import modal
 
-stub = modal.Stub("orcid-affiliation-dashboard")
+app = modal.App("orcid-affiliation-dashboard")
 
 # Define container dependencies
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
@@ -13,9 +13,9 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
 
 # Add the app.py file to the image
 app_path = Path(__file__).parent / "app.py"
-image = image.copy_local_file(app_path, "/root/app.py")
+image = image.add_local_file(app_path, "/root/app.py")
 
-@stub.function(
+@app.function(
     image=image,
     allow_concurrent_inputs=100,
     gpu=None,
@@ -31,4 +31,4 @@ async def run():
     streamlit.web.bootstrap.run("/root/app.py", "", [], [])
 
 if __name__ == "__main__":
-    stub.serve()
+    app.serve()
