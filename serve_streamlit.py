@@ -8,7 +8,9 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "streamlit~=1.41.1",
     "pandas~=2.2.3",
     "plotly~=5.24.1",
-    "openpyxl~=3.1.5"
+    "openpyxl~=3.1.5",
+    "fastapi[standard]",
+    "uvicorn"
 )
 
 # Add the app.py file to the image
