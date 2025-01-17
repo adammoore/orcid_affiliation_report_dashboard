@@ -29,6 +29,7 @@ jobs:
         echo "headless = true" >> ~/.streamlit/config.toml
         echo "enableCORS = false" >> ~/.streamlit/config.toml
         echo "enableXsrfProtection = false" >> ~/.streamlit/config.toml
+        echo "scriptPath = \"streamlit_app.py\"" >> ~/.streamlit/config.toml
     
     - name: Deploy to Streamlit Cloud
       env:
@@ -36,4 +37,3 @@ jobs:
       run: |
         streamlit run streamlit_app.py &
         sleep 10  # Give Streamlit time to start
-        # The app should now be accessible at the Streamlit Cloud URL

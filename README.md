@@ -14,11 +14,11 @@ An interactive dashboard for analyzing ORCID affiliation data.
 - Download filtered data as CSV
 - Responsive design
 
-## Installation
+## Local Development
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/orcid_affiliation_report_dashboard.git
+git clone https://github.com/adammoore/orcid_affiliation_report_dashboard.git
 cd orcid_affiliation_report_dashboard
 ```
 
@@ -29,16 +29,19 @@ source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
 pip install -r requirements.txt
 ```
 
-## Usage
-
-1. Run the Streamlit app:
+3. Run the Streamlit app:
 ```bash
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
-2. Open your web browser and go to http://localhost:8501
+4. Open your web browser and go to http://localhost:8501
 
-3. Upload your ORCID affiliation Excel file
+## Usage
+
+1. Upload your ORCID affiliation Excel file
+2. Use the sidebar filters to analyze specific data
+3. View visualizations in different tabs
+4. Export filtered data or summary statistics
 
 The Excel file should contain the following columns:
 - ORCID ID
@@ -57,15 +60,8 @@ The Excel file should contain the following columns:
 
 ## Deployment
 
-You can deploy this dashboard to various platforms:
-
-### Streamlit Cloud (Recommended)
-1. Push your code to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Deploy directly from your GitHub repository
-
-### Modal
-You can also deploy to Modal using the provided `serve_streamlit.py` script.
+The app is deployed to Streamlit Cloud and can be accessed at:
+https://orcid-inst-dashboard.streamlit.app/
 
 ## License
 
