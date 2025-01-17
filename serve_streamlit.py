@@ -1,8 +1,9 @@
 import modal
 from pathlib import Path
 
-stub = modal.Stub("orcid-affiliation-dashboard")
+app = modal.App("orcid-affiliation-dashboard")
 
+# Define container dependencies
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "streamlit~=1.41.1",
     "pandas~=2.2.3",
@@ -10,7 +11,11 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "openpyxl~=3.1.5"
 )
 
-@stub.function(
+# Add the app.py file to the image
+app_path = Path(__file__).parent / "app.py"
+image = image.add_local_file(app_path, "/root/app.py")
+
+@app.function(
     image=image,
     gpu=None,
     timeout=600,
@@ -31,11 +36,5 @@ async def run():
     sys.argv = ["streamlit", "run", str(app_path), "--server.address=0.0.0.0", "--server.port=7860", "--server.headless=true"]
     streamlit.web.bootstrap.run(str(app_path), "", [], [])
 
-# Mount the app code into the container
-stub.app_path = modal.Mount.from_local_file(
-    Path(__file__).parent / "app.py",
-    remote_path="/root/app.py"
-)
-
 if __name__ == "__main__":
-    stub.serve()
+    app.deploy()
