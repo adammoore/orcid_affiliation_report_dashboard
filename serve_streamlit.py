@@ -1,7 +1,5 @@
-import sys
 from pathlib import Path
 import modal
-import subprocess
 
 # Create a Modal app with a name
 app = modal.App("orcid-affiliation-dashboard")
@@ -11,9 +9,7 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "streamlit~=1.41.1",
     "pandas~=2.2.3",
     "plotly~=5.24.1",
-    "openpyxl~=3.1.5",
-    "fastapi[standard]",
-    "uvicorn"
+    "openpyxl~=3.1.5"
 )
 
 # Add the app.py file to the image
@@ -26,44 +22,13 @@ image = image.add_local_file(app_path, "/root/app.py")
     allow_concurrent_inputs=3,
     timeout=600,
 )
-@modal.asgi_app()
-def fastapi_app():
+@modal.web_endpoint(method="GET")
+def streamlit_app():
     import streamlit.web.bootstrap
-    from fastapi import FastAPI
-    from fastapi.responses import HTMLResponse
-    import uvicorn
+    import sys
     
-    web_app = FastAPI()
-    
-    @web_app.get("/")
-    async def root():
-        # Start Streamlit in a separate process
-        process = subprocess.Popen(
-            ["streamlit", "run", "/root/app.py", 
-             "--server.address=0.0.0.0", 
-             "--server.port=8501",
-             "--server.headless=true"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        # Return an HTML page that embeds the Streamlit app
-        return HTMLResponse(content="""
-        <html>
-            <head>
-                <title>ORCID Affiliation Dashboard</title>
-                <style>
-                    body, html { margin: 0; padding: 0; height: 100%; }
-                    iframe { width: 100%; height: 100%; border: none; }
-                </style>
-            </head>
-            <body>
-                <iframe src="http://localhost:8501"></iframe>
-            </body>
-        </html>
-        """)
-    
-    return web_app
+    sys.argv = ["streamlit", "run", "/root/app.py", "--server.address=0.0.0.0", "--server.port=7860", "--server.headless=true"]
+    streamlit.web.bootstrap.run("/root/app.py", "", [], [])
 
 if __name__ == "__main__":
     app.deploy()

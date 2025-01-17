@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
 import os
+import tempfile
 
 # Set page config
 st.set_page_config(
@@ -41,23 +42,20 @@ Upload your ORCID affiliation Excel file to analyze the data. The file should co
 - Identifier Value
 """)
 
-# Create a temporary directory for file uploads if it doesn't exist
-UPLOAD_DIR = "/tmp/streamlit_uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 # File uploader
 uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
 
 if uploaded_file is not None:
-    # Save the uploaded file to disk
-    file_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
     # Load data
     @st.cache_data
-    def load_data(file_path):
-        df = pd.read_excel(file_path)
+    def load_data(file):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+            tmp.write(file.getvalue())
+            tmp_path = tmp.name
+        
+        df = pd.read_excel(tmp_path)
+        os.unlink(tmp_path)  # Clean up the temporary file
+        
         df['Start Year'] = pd.to_numeric(df['Start Year'], errors='coerce')
         df['End Year'] = pd.to_numeric(df['End Year'], errors='coerce')
         df['Duration'] = df['End Year'] - df['Start Year']
@@ -65,10 +63,7 @@ if uploaded_file is not None:
 
     # Load the data
     try:
-        df = load_data(file_path)
-        
-        # Clean up the temporary file
-        os.remove(file_path)
+        df = load_data(uploaded_file)
         
         # Sidebar filters
         st.sidebar.header("Filters")
