@@ -3,18 +3,8 @@ from pathlib import Path
 import modal
 import subprocess
 
-def run_streamlit():
-    import streamlit.web.bootstrap
-    from streamlit.web.bootstrap import run
-    
-    filename = "/root/app.py"
-    command_line = f"streamlit run {filename} --server.address=0.0.0.0 --server.port=7860 --server.headless=true"
-    
-    sys.argv = command_line.split(" ")
-    run(sys.argv, "", "", [])
-
-# Create a Modal app
-app = modal.App()
+# Create a Modal app with a name
+app = modal.App("orcid-affiliation-dashboard")
 
 # Define container dependencies
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
@@ -22,7 +12,8 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "pandas~=2.2.3",
     "plotly~=5.24.1",
     "openpyxl~=3.1.5",
-    "fastapi[standard]"
+    "fastapi[standard]",
+    "uvicorn"
 )
 
 # Add the app.py file to the image
@@ -75,4 +66,4 @@ def fastapi_app():
     return web_app
 
 if __name__ == "__main__":
-    modal.runner.deploy_stub(app)
+    app.deploy()
