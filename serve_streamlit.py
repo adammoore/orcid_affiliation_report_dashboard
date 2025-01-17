@@ -14,8 +14,8 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
 )
 
 # Add the app.py file to the image
-app_path = Path(__file__).parent / "app.py"
-image = image.add_local_file(app_path, "/root/app.py")
+app_path = Path(__file__).parent / "streamlit_app.py"
+image = image.add_local_file(app_path, "/root/streamlit_app.py")
 
 @app.function(
     image=image,
@@ -30,13 +30,13 @@ async def run():
     from pathlib import Path
     
     root_path = Path("/root")
-    app_path = root_path / "app.py"
+    app_path = root_path / "streamlit_app.py"
     
     if not app_path.exists():
-        app_path = Path(__file__).parent / "app.py"
+        app_path = Path(__file__).parent / "streamlit_app.py"
     
     sys.argv = ["streamlit", "run", str(app_path), "--server.address=0.0.0.0", "--server.port=7860", "--server.headless=true"]
     streamlit.web.bootstrap.run(str(app_path), "", [], [])
 
 if __name__ == "__main__":
-    app.deploy()
+    app.serve()
