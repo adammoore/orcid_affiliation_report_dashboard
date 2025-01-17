@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import numpy as np
 
 # Set page config
 st.set_page_config(
@@ -10,6 +11,15 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .stProgress > div > div > div > div {
+        background-color: #1f77b4;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Title and description
 st.title("ORCID Affiliation Analysis Dashboard")
@@ -40,14 +50,25 @@ if uploaded_file is not None:
         df = pd.read_excel(file)
         df['Start Year'] = pd.to_numeric(df['Start Year'], errors='coerce')
         df['End Year'] = pd.to_numeric(df['End Year'], errors='coerce')
+        df['Duration'] = df['End Year'] - df['Start Year']
         return df
 
     # Load the data
     try:
         df = load_data(uploaded_file)
-
+        
         # Sidebar filters
         st.sidebar.header("Filters")
+
+        # Date range filter
+        min_year = int(df['Start Year'].min())
+        max_year = int(datetime.now().year)
+        year_range = st.sidebar.slider(
+            "Select Year Range",
+            min_value=min_year,
+            max_value=max_year,
+            value=(min_year, max_year)
+        )
 
         # Role filter
         selected_roles = st.sidebar.multiselect(
@@ -66,11 +87,13 @@ if uploaded_file is not None:
         # Filter data
         filtered_df = df[
             (df['Org Affiliation Relation Role'].isin(selected_roles)) &
-            ((df['Department'].isin(selected_departments)) | (df['Department'].isna()))
+            ((df['Department'].isin(selected_departments)) | (df['Department'].isna())) &
+            (df['Start Year'] >= year_range[0]) &
+            (df['Start Year'] <= year_range[1])
         ]
 
-        # Create two columns for metrics
-        col1, col2, col3 = st.columns(3)
+        # Metrics Row
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             st.metric("Total Affiliations", len(filtered_df))
@@ -79,74 +102,138 @@ if uploaded_file is not None:
             st.metric("Unique ORCID IDs", filtered_df['ORCID ID'].nunique())
 
         with col3:
-            st.metric("Active Affiliations", 
-                    len(filtered_df[filtered_df['End Year'].isna()]))
+            active_count = len(filtered_df[filtered_df['End Year'].isna()])
+            st.metric("Active Affiliations", active_count)
 
-        # Create two columns for charts
+        with col4:
+            avg_duration = filtered_df['Duration'].mean()
+            st.metric("Avg Duration (Years)", f"{avg_duration:.1f}" if pd.notna(avg_duration) else "N/A")
+
+        # Create tabs for different visualizations
+        tab1, tab2, tab3 = st.tabs(["Overview", "Temporal Analysis", "Network Analysis"])
+
+        with tab1:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Role distribution
+                st.subheader("Distribution of Roles")
+                role_counts = filtered_df['Org Affiliation Relation Role'].value_counts()
+                fig_roles = px.pie(values=role_counts.values, 
+                                names=role_counts.index,
+                                title="Distribution of Roles")
+                st.plotly_chart(fig_roles, use_container_width=True)
+
+            with col2:
+                # Department distribution
+                st.subheader("Top Departments")
+                dept_counts = filtered_df['Department'].value_counts().head(10)
+                fig_dept = px.bar(x=dept_counts.index, 
+                                y=dept_counts.values,
+                                title="Top 10 Departments")
+                fig_dept.update_layout(xaxis_title="Department",
+                                    yaxis_title="Count",
+                                    xaxis_tickangle=45)
+                st.plotly_chart(fig_dept, use_container_width=True)
+
+        with tab2:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Timeline of affiliations
+                st.subheader("Timeline of Affiliations")
+                timeline_df = filtered_df.dropna(subset=['Start Year'])
+                fig_timeline = px.histogram(timeline_df, 
+                                        x='Start Year',
+                                        title="Distribution of Start Years")
+                fig_timeline.update_layout(xaxis_title="Year",
+                                        yaxis_title="Number of Affiliations")
+                st.plotly_chart(fig_timeline, use_container_width=True)
+
+            with col2:
+                # Duration distribution
+                st.subheader("Duration Distribution")
+                duration_df = filtered_df.dropna(subset=['Duration'])
+                fig_duration = px.box(duration_df, 
+                                    y='Duration',
+                                    points="all",
+                                    title="Distribution of Affiliation Durations")
+                st.plotly_chart(fig_duration, use_container_width=True)
+
+        with tab3:
+            # Network visualization of departments and roles
+            st.subheader("Department-Role Network")
+            
+            # Create network data
+            dept_role_counts = filtered_df.groupby(['Department', 'Org Affiliation Relation Role']).size().reset_index(name='count')
+            dept_role_counts = dept_role_counts.dropna(subset=['Department'])
+            
+            # Create network graph
+            fig_network = go.Figure()
+            
+            # Add nodes for departments
+            for dept in dept_role_counts['Department'].unique():
+                fig_network.add_trace(go.Scatter(
+                    x=[0],
+                    y=[np.random.random()],
+                    mode='markers+text',
+                    name=dept,
+                    text=[dept],
+                    marker=dict(size=20),
+                    textposition="middle right"
+                ))
+            
+            # Add nodes for roles
+            for role in dept_role_counts['Org Affiliation Relation Role'].unique():
+                fig_network.add_trace(go.Scatter(
+                    x=[1],
+                    y=[np.random.random()],
+                    mode='markers+text',
+                    name=role,
+                    text=[role],
+                    marker=dict(size=20),
+                    textposition="middle left"
+                ))
+            
+            fig_network.update_layout(
+                showlegend=False,
+                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                title="Department-Role Relationships"
+            )
+            
+            st.plotly_chart(fig_network, use_container_width=True)
+
+        # Export options
+        st.subheader("Export Data")
         col1, col2 = st.columns(2)
-
+        
         with col1:
-            # Role distribution
-            st.subheader("Distribution of Roles")
-            role_counts = filtered_df['Org Affiliation Relation Role'].value_counts()
-            fig_roles = px.pie(values=role_counts.values, 
-                            names=role_counts.index,
-                            title="Distribution of Roles")
-            st.plotly_chart(fig_roles, use_container_width=True)
-
+            if st.button("Download Filtered Data as CSV"):
+                csv = filtered_df.to_csv(index=False)
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name="filtered_orcid_data.csv",
+                    mime="text/csv"
+                )
+        
         with col2:
-            # Department distribution
-            st.subheader("Top Departments")
-            dept_counts = filtered_df['Department'].value_counts().head(10)
-            fig_dept = px.bar(x=dept_counts.index, 
-                            y=dept_counts.values,
-                            title="Top 10 Departments")
-            fig_dept.update_layout(xaxis_title="Department",
-                                yaxis_title="Count",
-                                xaxis_tickangle=45)
-            st.plotly_chart(fig_dept, use_container_width=True)
-
-        # Timeline of affiliations
-        st.subheader("Timeline of Affiliations")
-        timeline_df = filtered_df.dropna(subset=['Start Year'])
-        fig_timeline = px.histogram(timeline_df, 
-                                x='Start Year',
-                                title="Distribution of Start Years")
-        fig_timeline.update_layout(xaxis_title="Year",
-                                yaxis_title="Number of Affiliations")
-        st.plotly_chart(fig_timeline, use_container_width=True)
-
-        # Additional Analysis
-        st.subheader("Additional Analysis")
-        col1, col2 = st.columns(2)
-
-        with col1:
-            # Average duration of completed affiliations
-            completed_affiliations = filtered_df.dropna(subset=['Start Year', 'End Year'])
-            if not completed_affiliations.empty:
-                avg_duration = (completed_affiliations['End Year'] - completed_affiliations['Start Year']).mean()
-                st.metric("Average Duration (Years)", f"{avg_duration:.1f}")
-
-        with col2:
-            # Most common titles
-            st.write("Top 5 Position Titles")
-            title_counts = filtered_df['Org Affiliation Relation Title'].value_counts().head()
-            st.write(title_counts)
+            if st.button("Download Summary Statistics"):
+                summary_stats = {
+                    "Total Affiliations": len(filtered_df),
+                    "Unique ORCID IDs": filtered_df['ORCID ID'].nunique(),
+                    "Active Affiliations": active_count,
+                    "Average Duration": float(avg_duration) if pd.notna(avg_duration) else None,
+                    "Role Distribution": role_counts.to_dict(),
+                    "Department Distribution": dept_counts.to_dict()
+                }
+                st.json(summary_stats)
 
         # Show raw data
         if st.checkbox("Show Raw Data"):
             st.subheader("Raw Data")
             st.dataframe(filtered_df)
-
-        # Download filtered data
-        if st.button("Download Filtered Data as CSV"):
-            csv = filtered_df.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name="filtered_orcid_data.csv",
-                mime="text/csv"
-            )
 
     except Exception as e:
         st.error(f"""
