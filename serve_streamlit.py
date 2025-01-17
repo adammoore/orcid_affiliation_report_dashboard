@@ -1,16 +1,15 @@
 from pathlib import Path
-from modal import Image, Stub, web_endpoint
+import modal
 
 # Create a Modal stub
-stub = Stub("orcid-affiliation-dashboard")
+stub = modal.Stub("orcid-affiliation-dashboard")
 
 # Define container dependencies
-image = Image.debian_slim(python_version="3.11").pip_install(
+image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "streamlit~=1.41.1",
     "pandas~=2.2.3",
     "plotly~=5.24.1",
     "openpyxl~=3.1.5",
-    "modal~=0.72.23",  # Add explicit Modal dependency
     "fastapi[standard]"
 )
 
@@ -23,7 +22,7 @@ image = image.add_local_file(app_path, "/root/app.py")
     allow_concurrent_inputs=100,
     timeout=600,
 )
-@web_endpoint()
+@modal.web_endpoint()
 async def run():
     import streamlit.web.bootstrap
     import sys
