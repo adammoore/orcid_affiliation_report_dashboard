@@ -3,11 +3,12 @@ import pandas as pd
 from typing import List, Dict, Any
 import time
 from datetime import datetime
+import xml.etree.ElementTree as ET
 
 class OrcidAPI:
     BASE_URL = "https://pub.orcid.org/v3.0"
     HEADERS = {
-        "Accept": "application/json"
+        "Accept": "application/vnd.orcid+json"
     }
     
     @staticmethod
@@ -44,6 +45,9 @@ class OrcidAPI:
                 start_date = emp.get("start-date", {})
                 end_date = emp.get("end-date", {})
                 
+                start_year = start_date.get("year", {}).get("value") if start_date else None
+                end_year = end_date.get("year", {}).get("value") if end_date else None
+                
                 affiliation = {
                     "ORCID ID": orcid,
                     "Given Names": given_names,
@@ -51,8 +55,9 @@ class OrcidAPI:
                     "Org Affiliation Relation Role": "EMPLOYMENT",
                     "Org Affiliation Relation Title": emp.get("role-title", ""),
                     "Department": emp.get("department-name", ""),
-                    "Start Year": start_date.get("year", {}).get("value") if start_date else None,
-                    "End Year": end_date.get("year", {}).get("value") if end_date else None,
+                    "Start Year": start_year,
+                    "End Year": end_year,
+                    "Duration": end_year - start_year if (start_year and end_year) else None,
                     "Date Created": emp.get("created-date", {}).get("value"),
                     "Last Modified": emp.get("last-modified-date", {}).get("value"),
                     "Source": "ORCID API",
@@ -76,41 +81,37 @@ class OrcidAPI:
         try:
             query = self.build_email_query(domains)
             
-            while rows_processed < max_results:
-                url = f"{self.BASE_URL}/expanded-search/"
-                params = {
-                    "q": query,
-                    "start": rows_processed,
-                    "rows": min(200, max_results - rows_processed)  # ORCID API limit is 200 per request
-                }
+            # First, get all ORCID IDs matching the email domain
+            url = f"{self.BASE_URL}/search"
+            params = {
+                "q": query,
+                "rows": max_results
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            
+            # Parse XML response
+            root = ET.fromstring(response.content)
+            ns = {'search': 'http://www.orcid.org/ns/search',
+                  'common': 'http://www.orcid.org/ns/common'}
+            
+            orcid_ids = []
+            for result in root.findall('.//common:path', ns):
+                orcid_ids.append(result.text)
+            
+            # Now fetch details for each ORCID ID
+            for orcid_id in orcid_ids:
+                record_url = f"{self.BASE_URL}/{orcid_id}/record"
+                record_response = requests.get(record_url, headers=self.HEADERS)
                 
-                response = requests.get(url, headers=self.HEADERS, params=params)
-                response.raise_for_status()
+                if record_response.status_code == 200:
+                    record_data = record_response.json()
+                    parsed_data = self.parse_record(record_data)
+                    all_affiliations.extend(parsed_data["affiliations"])
                 
-                data = response.json()
-                total_results = data.get("num-found", 0)
-                
-                if total_results == 0:
-                    break
-                
-                for result in data.get("expanded-result", []):
-                    orcid = result.get("orcid-id")
-                    if orcid:
-                        record_url = f"{self.BASE_URL}/{orcid}/record"
-                        record_response = requests.get(record_url, headers=self.HEADERS)
-                        
-                        if record_response.status_code == 200:
-                            record_data = record_response.json()
-                            parsed_data = self.parse_record(record_data)
-                            all_affiliations.extend(parsed_data["affiliations"])
-                        
-                        # Rate limiting - be nice to the API
-                        time.sleep(0.1)
-                
-                rows_processed += len(data.get("expanded-result", []))
-                
-                if rows_processed >= total_results:
-                    break
+                # Rate limiting - be nice to the API
+                time.sleep(0.1)
         
         except Exception as e:
             print(f"Error searching ORCID records: {e}")
@@ -121,13 +122,32 @@ class OrcidAPI:
             for col in ['Date Created', 'Last Modified']:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], unit='ms')
+            
+            # Ensure all required columns exist
+            required_columns = [
+                'ORCID ID', 'Given Names', 'Family Name', 'Org Affiliation Relation Role',
+                'Start Year', 'End Year', 'Department', 'Source', 'Email Addresses'
+            ]
+            for col in required_columns:
+                if col not in df.columns:
+                    df[col] = None
+            
+            # Calculate Duration
+            df['Duration'] = pd.to_numeric(df['End Year'], errors='coerce') - pd.to_numeric(df['Start Year'], errors='coerce')
+            
             return df
         else:
-            return pd.DataFrame()
+            # Return empty DataFrame with required columns
+            return pd.DataFrame(columns=[
+                'ORCID ID', 'Given Names', 'Family Name', 'Org Affiliation Relation Role',
+                'Start Year', 'End Year', 'Duration', 'Department', 'Source', 'Email Addresses'
+            ])
 
     def merge_with_existing_data(self, api_data: pd.DataFrame, file_data: pd.DataFrame) -> pd.DataFrame:
         """Merge API data with existing file data."""
         if api_data.empty:
+            if 'Duration' not in file_data.columns:
+                file_data['Duration'] = pd.to_numeric(file_data['End Year'], errors='coerce') - pd.to_numeric(file_data['Start Year'], errors='coerce')
             return file_data
         if file_data.empty:
             return api_data
@@ -139,6 +159,10 @@ class OrcidAPI:
         # Add email addresses column to file data if it doesn't exist
         if 'Email Addresses' not in file_data.columns:
             file_data['Email Addresses'] = None
+        
+        # Calculate Duration for file data if not present
+        if 'Duration' not in file_data.columns:
+            file_data['Duration'] = pd.to_numeric(file_data['End Year'], errors='coerce') - pd.to_numeric(file_data['Start Year'], errors='coerce')
         
         # Concatenate the dataframes
         merged_df = pd.concat([file_data, api_data], ignore_index=True)
